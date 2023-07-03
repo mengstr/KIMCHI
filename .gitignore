@@ -1,0 +1,14 @@
+*.tmp
+*~
+
+*.lst
+*.bin
+*.elf
+*.hex
+*.map
+*.o
+*.o65
+
+.vscode/
+ch32v003fun/
+TEST/
