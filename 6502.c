@@ -589,7 +589,6 @@ static void tya() {
 }
 
 
-
 void adc_abso()     {abso();    adc();  };
 void adc_absx()     {absx();    adc();  };
 void adc_absy()     {absy();    adc();  };
@@ -598,6 +597,7 @@ void adc_indx()     {indx();    adc();  };
 void adc_indy()     {indy();    adc();  };
 void adc_zp()       {zp();      adc();  };
 void adc_zpx()      {zpx();     adc();  };
+
 void and_abso()     {abso();    and();  };
 void and_absx()     {absx();    and();  };
 void and_absy()     {absy();    and();  };
@@ -606,20 +606,25 @@ void and_indx()     {indx();    and();  };
 void and_indy()     {indy();    and();  };
 void and_zp()       {zp();      and();  };
 void and_zpx()      {zpx();     and();  };
+
 void asl_abso()     {abso();    asl();  };
 void asl_absx()     {absx();    asl();  };
 void asl_zp()       {zp();      asl();  };
 void asl_zpx()      {zpx();     asl();  };
+
 void bcc_rel()      {rel();     bcc();  };
 void bcs_rel()      {rel();     bcs();  };
 void beq_rel()      {rel();     beq();  };
+
 void bit_abso()     {abso();    bit();  };
 void bit_zp()       {zp();      bit();  };
+
 void bmi_rel()      {rel();     bmi();  };
 void bne_rel()      {rel();     bne();  };
 void bpl_rel()      {rel();     bpl();  };
 void bvc_rel()      {rel();     bvc();  };
 void bvs_rel()      {rel();     bvs();  };
+
 void cmp_abso()     {abso();    cmp();  };
 void cmp_absx()     {absx();    cmp();  };
 void cmp_absy()     {absy();    cmp();  };
@@ -628,16 +633,20 @@ void cmp_indx()     {indx();    cmp();  };
 void cmp_indy()     {indy();    cmp();  };
 void cmp_zp()       {zp();      cmp();  };
 void cmp_zpx()      {zpx();     cmp();  };
+
 void cpx_abso()     {abso();    cpx();  };
 void cpx_imm()      {imm();     cpx();  };
 void cpx_zp()       {zp();      cpx();  };
+
 void cpy_abso()     {abso();    cpy();  };
 void cpy_imm()      {imm();     cpy();  };
 void cpy_zp()       {zp();      cpy();  };
+
 void dec_abso()     {abso();    dec();  };
 void dec_absx()     {absx();    dec();  };
 void dec_zp()       {zp();      dec();  };
 void dec_zpx()      {zpx();     dec();  };
+
 void eor_abso()     {abso();    eor();  };
 void eor_absx()     {absx();    eor();  };
 void eor_absy()     {absy();    eor();  };
@@ -646,13 +655,17 @@ void eor_indx()     {indx();    eor();  };
 void eor_indy()     {indy();    eor();  };
 void eor_zp()       {zp();      eor();  };
 void eor_zpx()      {zpx();     eor();  };
+
 void inc_abso()     {abso();    inc();  };
 void inc_absx()     {absx();    inc();  };
 void inc_zp()       {zp();      inc();  };
 void inc_zpx()      {zpx();     inc();  };
+
 void jmp_abso()     {abso();    jmp();  };
 void jmp_ind()      {ind();     jmp();  };
+
 void jsr_abso()     {abso();    jsr();  };
+
 void lda_abso()     {abso();    lda();  };
 void lda_absx()     {absx();    lda();  };
 void lda_absy()     {absy();    lda();  };
@@ -661,20 +674,24 @@ void lda_indx()     {indx();    lda();  };
 void lda_indy()     {indy();    lda();  };
 void lda_zp()       {zp();      lda();  };
 void lda_zpx()      {zpx();     lda();  };
+
 void ldx_abso()     {abso();    ldx();  };
 void ldx_absy()     {absy();    ldx();  };
 void ldx_imm()      {imm();     ldx();  };
 void ldx_zp()       {zp();      ldx();  };
 void ldx_zpy()      {zpy();     ldx();  };
+
 void ldy_abso()     {abso();    ldy();  };
 void ldy_absx()     {absx();    ldy();  };
 void ldy_imm()      {imm();     ldy();  };
 void ldy_zp()       {zp();      ldy();  };
 void ldy_zpx()      {zpx();     ldy();  };
+
 void lsr_abso()     {abso();    lsr();  };
 void lsr_absx()     {absx();    lsr();  };
 void lsr_zp()       {zp();      lsr();  };
 void lsr_zpx()      {zpx();     lsr();  };
+
 void ora_abso()     {abso();    ora();  };
 void ora_absx()     {absx();    ora();  };
 void ora_absy()     {absy();    ora();  };
@@ -683,14 +700,17 @@ void ora_indx()     {indx();    ora();  };
 void ora_indy()     {indy();    ora();  };
 void ora_zp()       {zp();      ora();  };
 void ora_zpx()      {zpx();     ora();  };
+
 void rol_abso()     {abso();    rol();  };
 void rol_absx()     {absx();    rol();  };
 void rol_zp()       {zp();      rol();  };
 void rol_zpx()      {zpx();     rol();  };
+
 void ror_abso()     {abso();    ror();  };
 void ror_absx()     {absx();    ror();  };
 void ror_zp()       {zp();      ror();  };
 void ror_zpx()      {zpx();     ror();  };
+
 void sbc_abso()     {abso();    sbc();  };
 void sbc_absx()     {absx();    sbc();  };
 void sbc_absy()     {absy();    sbc();  };
@@ -699,6 +719,7 @@ void sbc_indx()     {indx();    sbc();  };
 void sbc_indy()     {indy();    sbc();  };
 void sbc_zp()       {zp();      sbc();  };
 void sbc_zpx()      {zpx();     sbc();  };
+
 void sta_abso()     {abso();    sta();  };
 void sta_absx()     {absx();    sta();  };
 void sta_absy()     {absy();    sta();  };
@@ -706,12 +727,15 @@ void sta_indx()     {indx();    sta();  };
 void sta_indy()     {indy();    sta();  };
 void sta_zp()       {zp();      sta();  };
 void sta_zpx()      {zpx();     sta();  };
-void stx_abso()     {abso();    sta();  };
+
+void stx_abso()     {abso();    stx();  };
 void stx_zp()       {zp();      stx();  };
 void stx_zpy()      {zpy();     stx();  };
+
 void sty_abso()     {abso();    sty();  };
 void sty_zp()       {zp();      sty();  };
 void sty_zpx()      {zpx();     sty();  };
+
 void illegalOp()    {brk();             };
 
 
