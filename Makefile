@@ -30,12 +30,12 @@ LINKER_SCRIPT?=ch32v003fun/ch32v003fun.ld
 LDFLAGS+=-T $(LINKER_SCRIPT) -Wl,--gc-sections -Lch32v003fun -lgcc
 
 ROMFILE = kimrom
-CFILES	= $(wildcard *.c) $(wildcard ch32v003fun/*.c)
+CFILES	= $(wildcard *.c) 
 SFILES  = $(wildcard *.s)
 
 SOBJS   =   $(SFILES:.s=.o)
 COBJS   =   $(CFILES:.c=.o)
-OBJS	=   $(SOBJS) $(COBJS)
+OBJS	=   $(SOBJS) $(COBJS) ch32v003fun/ch32v003fun.o
 
 ENFORCESIZE = @(FILESIZE=`stat -f '%z' $1` ; \
 		if [ $$FILESIZE -ne $2 ] ; then \
@@ -43,7 +43,7 @@ ENFORCESIZE = @(FILESIZE=`stat -f '%z' $1` ; \
 			exit 1; \
 	fi )
 
-build : $(ROMFILE).h $(TARGET).bin
+build : ch32v003fun $(ROMFILE).h $(TARGET).bin
 		@$(MAKE) -C TFBOK
 
 %.o: %.c
@@ -78,20 +78,24 @@ $(ROMFILE).o65: $(ROMFILE).a65
 	@echo Assembling 6530-003 ROM Monitor
 	@ca65 -g -o $(ROMFILE).o65 -l $(ROMFILE).lst --feature labels_without_colons $(ROMFILE).a65
 
-.PHONY: flash getfun clean
-
-flash: $(TARGET).bin
-	minichlink -D -w $< flash -b -T
-
-getfun:
+ch32v003fun:
 	@echo Getting fresh copy of ch32v003fun from github
 	@rm -rf ch32v003fun tmpfun
 	@git clone --depth 1 https://github.com/cnlohr/ch32v003fun.git tmpfun
 	@cp tmpfun/misc/libgcc.a tmpfun/ch32v003fun
 	@mv tmpfun/ch32v003fun/ . 
 	@rm -rf tmpfun
+	@$(CC) $(CFLAGS) -c -o ch32v003fun/ch32v003fun.o ch32v003fun/ch32v003fun.c
+
+.PHONY: flash clean distclean
+
+flash: $(TARGET).bin
+	minichlink -D -w $< flash -b -T
 
 clean:
 	@$(RM) $(OBJS) $(TARGET).elf $(TARGET).bin $(TARGET).hex $(TARGET).lst $(TARGET).map $(TARGET).hex
 	@$(RM) $(ROMFILE).o65 $(ROMFILE).lst $(ROMFILE).map $(ROMFILE).bin $(ROMFILE).ptp $(ROMFILE).h65 $(ROMFILE).h
 	@$(MAKE) -C TFBOK clean
+
+distclean: clean
+	@$(RM) -rf ch32v003fun/
