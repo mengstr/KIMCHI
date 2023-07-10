@@ -1,0 +1,12 @@
+void lda(void);
+void ldx(void);
+void ldy(void);
+void sta(void);
+void stx(void);
+void sty(void);
+void tax(void);
+void tay(void);
+void tsx(void);
+void txa(void);
+void txs(void);
+void tya(void);
