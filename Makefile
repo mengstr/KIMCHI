@@ -16,7 +16,7 @@ OBJCOPY=riscv64-unknown-elf-objcopy
 CFLAGS+= \
 	-g -Os \
 	-flto -ffunction-sections \
-	-Wall \
+	-Wall -Wshadow \
 	-march=rv32ec \
 	-mabi=ilp32e \
 	-nostdlib \
@@ -32,7 +32,7 @@ LDFLAGS+=-T $(LINKER_SCRIPT) -Wl,--gc-sections -Lch32v003fun -lgcc
 # ASFLAGS =   -f elf
 
 ROMFILE = kimrom
-CFILES	= $(wildcard *.c) $(wildcard ch32v003fun/*.c) $(ROMFILE).c
+CFILES	= $(wildcard *.c) $(wildcard ch32v003fun/*.c) $(ROMFILE).c $(wildcard TEST/*.c)
 SFILES  = $(wildcard *.s)
 
 echo CFILES = $(CFILES)
@@ -84,7 +84,7 @@ $(ROMFILE).o65: $(ROMFILE).a65
 .PHONY: flash getfun clean
 
 flash: $(TARGET).bin
-	minichlink -w $< flash -b -T
+	minichlink -D -w $< flash -b -T
 
 getfun:
 	@echo Getting fresh copy of ch32v003fun from github

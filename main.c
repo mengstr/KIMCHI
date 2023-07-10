@@ -3,6 +3,7 @@
 
 const int TRACE=0;
 const int GTRACE=0;
+uint8_t DEBUG = 0;
 
 //
 //      CH32V003F4P6 SSOP20
@@ -23,8 +24,8 @@ const int GTRACE=0;
 // +----------------------------------------------------------------------+
 //
 //
-// PA1  
-// PA2  
+// PA1 --> Key RS 
+// PA2 --> Key ST 
 // PC0 --> PA0 Key Column for 6 D PC
 // PC1 --> PA1 Key Column for 5 C GO
 // PC2 --> PA2 Key Column for 4 B +
@@ -40,12 +41,13 @@ const int GTRACE=0;
 // PD4 --> PB2 Display/Key Row mux 
 // PD5 --> PB3 Display/Key Row mux 
 // PD6 --> PB4 Display/Key Row mux MSB 
-// PD7 
+// PD7 --> Switch SST
 //
 
 // http://www.zimmers.net/anonftp/pub/cbm/src/kim-1/6530-002-003.PDF
 // http://retro.hansotten.nl/6502-sbc/kim-1-manuals-and-software/
 // http://www.erich-foltyn.eu/Technique/KIM1-Circuit-Diagram.html
+// https://github.com/maksimKorzh/KIM-1/tree/main/software/First_book_of_KIM_sources/Games
 
 // K0 $0000 – $03FF 1024 bytes of RAM (8*6102)
 // K1 $0400 – $07FF free
@@ -95,8 +97,8 @@ const int GTRACE=0;
 // 6530-003 PB7
 
 
-extern uint_fast16_t pc; 
-extern uint_fast8_t sp, a, x, y, status; 
+extern uint16_t pc; 
+extern uint8_t sp, a, x, y, status; 
 
 
 #define TIMER1          0x1704
@@ -150,74 +152,66 @@ extern uint_fast8_t sp, a, x, y, status;
 
 void reset6502();
 uint32_t exec6502(uint32_t count);
-uint_fast8_t read6502(uint_fast16_t address);
-void write6502(uint_fast16_t address, uint_fast8_t value);
-extern void setPC(uint_fast16_t address);
+uint8_t read6502(uint16_t address);
+void write6502(uint16_t address, uint8_t value);
+extern void setPC(uint16_t address);
+extern void printStatus(void);
 
 extern const uint8_t ROM6530[];
+
+// extern const unsigned long DecimalTest_length;
+// extern const uint8_t DecimalTest[];
 
 #define MUX         GPIOD->BSHR
 #define KEYSEG      GPIOC->BSHR
 #define MUX_DIR     GPIOD->CFGLR
 #define KEYSEG_DIR  GPIOC->CFGLR
 
-uint8_t RAM[1024];
+volatile uint8_t RAM[1024];
 uint8_t RAM_1780[128];
 uint8_t sad=0xff,padd=0xff,sbd=0xff,pbdd=0xff;
 
-uint_fast8_t read6502(uint_fast16_t address) {
+uint8_t read6502(uint16_t address) {
     address=address&0xFFFF;
     if (address<1024) {
-        if (TRACE) printf("Read from RAM %04x, value is %02x\n",address,RAM[address]);
+        if ((TRACE>0)) printf("R RAM %04x val=%02x pc=%04x\n",address,RAM[address],pc);
         return RAM[address];
     }
     if (address>=0x1C00) {
-        if (TRACE) printf("Read from ROM %05x, value is %02x\n",address,ROM6530[address&0x3FF]);
+        if (TRACE) printf("R ROM %05x val=%02x\n",address,ROM6530[address&0x3FF]);
         return ROM6530[address&0x3FF];
     }
     if (address==SAD) {
-        if (GTRACE) printf("Read from SAD, value %02x\n", sad); 
+        sad=GPIOC->INDR|0x80;   // Always use KEYPAD
+        if (GTRACE) printf("R SAD val=%02x\n", sad); 
         return sad;
     }
     if (address==SBD) {
-        if (GTRACE) printf("Read from SBD, value %02x\n", sbd); 
+        printf("EY! R SBD val=%02x\n", sbd); 
         return sbd;
     }
     if (address==PADD){
-        if (GTRACE) printf("Read from PADD, value %02x\n", padd);
+        if (GTRACE) printf("EY! R PADD val=%02x\n", padd);
         return padd;
     }
     if (address==PBDD){
-        if (GTRACE) printf("Read from PBDD, value %02x\n", pbdd);
+        if (GTRACE) printf("EY! R PBDD val=%02x\n", pbdd);
         return pbdd;
     }
     if (address>=0x1780 && address<0x1800) {
-        if (TRACE) printf("Read from SCRATCH %04x, value %02x\n",address,RAM_1780[address&0x7F]);
+        if (TRACE) printf("R SCRATCH %04x val=%02x\n",address,RAM_1780[address&0x7F]);
         return RAM_1780[address&0x7F];
     }
-    printf("ERROR: Read from %04x, value ?\n",address);
+    printf("EY! R %04x\n",address);
     return 0;
 }
 
-// out0=.......1  in0=.......8
-// out1=......10  in1=......80
-// out2=.....100  in1=.....800
-// out3=....1000  in1=....8000
-// out4=...10000  in1=...80000
-// out5=..100000  in1=..800000
-// out6=.1000000  in6=.8000000
-// out7=10000000  in7=80000000
-
-// reset0=00010000 set0=00000001
-// reset1=00020000 set1=00000002
-// reset6=00400000 set6=00000040
-// reset7=00800000 set7=00000080
-
-void write6502(uint_fast16_t address, uint_fast8_t value) {
+void write6502(uint16_t address, uint8_t value) {
     value=value&0xFF;
     address=address&0xFFFF;
+
     if (address<1024) {
-        if (TRACE) printf("Write to RAM %04x, value %02x\n",address,value);
+        if ((TRACE>0)) printf("W RAM %04x val=%02x pc=%04x\n",address,value,pc);
         RAM[address]=value;
         return;
     }
@@ -225,19 +219,17 @@ void write6502(uint_fast16_t address, uint_fast8_t value) {
         uint8_t valueInv=value^0xFF;
         uint32_t b=(valueInv<<16)|value;
         KEYSEG=b;
-        if (TRACE) printf("Write to SAD, value %02x KEYSEG=%08lx\n", value,b); 
-        if (GTRACE) printf("Write to SAD, value %02x KEYSEG=%08lx\n", value,b); 
+        if (TRACE) printf("W SAD val=%02x KEYSEG=%08lx\n", value,b); 
+        if (GTRACE) printf("W SAD val=%02x KEYSEG=%08lx\n", value,b); 
         return;
         }
     if (address==SBD) {
         value=0xff&(value<<2);
         uint8_t valueInv=value^0xFF;
         uint32_t b=(valueInv<<16)|value<<0;
-        uint32_t bb=b;
-        // b=0x00df0020;
         MUX=b;
-        if (TRACE) printf("Write to SBD, value %02x MUX=%08lx was=%08lx\n", value,b,bb); 
-        if (GTRACE) printf("Write to SBD, value %02x MUX=%08lx was=%08lx\n", value,b,bb); 
+        if (TRACE) printf("W SBD val=%02x MUX=%08lx\n", value,b); 
+        if (GTRACE) printf("W SBD val=%02x MUX=%08lx\n", value,b); 
         return;
         }
 
@@ -250,7 +242,7 @@ void write6502(uint_fast16_t address, uint_fast8_t value) {
         // PC5 --> PA5 Key Column for 1 8 F 
         // PC6 --> PA6 Key Column for 0 7 E 
         // PC7 --> PA7 TTY In 
-        uint32_t b=
+        uint32_t dirbits=
             (value&0x01 ?        0x1 :        0x8) |
             (value&0x02 ?       0x10 :       0x80) |
             (value&0x04 ?      0x100 :      0x800) |
@@ -259,10 +251,22 @@ void write6502(uint_fast16_t address, uint_fast8_t value) {
             (value&0x20 ?   0x100000 :   0x800000) |
             (value&0x40 ?  0x1000000 :  0x8000000) |
             (value&0x80 ? 0x10000000 : 0x80000000);
-            b=0x81111111;
-KEYSEG_DIR=b;
-        if (TRACE) printf("Write to PADD, value %02x KEYSEG_DIR=%08lx\n", value,b);
-        if (GTRACE) printf("Write to PADD, value %02x KEYSEG_DIR=%08lx\n", value,b);
+        uint32_t pubits=
+            (value&0x01 ? 0 : 0x01) |
+            (value&0x02 ? 0 : 0x02) |
+            (value&0x04 ? 0 : 0x04) |
+            (value&0x08 ? 0 : 0x08) |
+            (value&0x10 ? 0 : 0x10) |
+            (value&0x20 ? 0 : 0x20) |
+            (value&0x40 ? 0 : 0x40) |
+            (value&0x80 ? 0 : 0x80);
+
+        KEYSEG_DIR=dirbits;
+        GPIOC->OUTDR=pubits;
+
+        if (TRACE) printf("W PADD val=%02x KEYSEG_DIR=%08lx GPIOC_OUTDR=%08lx\n", value,dirbits,pubits);
+        if (GTRACE) printf("W PADD val=%02x KEYSEG_DIR=%08lx GPIOC_OUTDR=%08lx\n", value,dirbits,pubits);
+
         return;
     }
 
@@ -285,332 +289,131 @@ KEYSEG_DIR=b;
             (value&0x20 ?   0x100000 :   0x800000) |
             (value&0x40 ?  0x1000000 :  0x8000000) |
             (value&0x80 ? 0x10000000 : 0x80000000);
-// b=0x81111188;
         MUX_DIR=b;
-        if (TRACE) printf("Write to PBDD, value %02x MUX_DIR=%08lx\n", value,b); 
-        if (GTRACE) printf("Write to PBDD, value %02x MUX_DIR=%08lx\n", value,b); 
+        if (TRACE) printf("W PBDD val=%02x MUX_DIR=%08lx\n", value,b); 
+        if (GTRACE) printf("W PBDD val=%02x MUX_DIR=%08lx\n", value,b); 
         return;
         }
     if (address>=0x1780 && address<0x1800) {
-        if (TRACE) printf("Write to SCRATCH %04x, value %02x\n",address,value);
+        if (TRACE) printf("W SCRATCH %04x val=%02x\n",address,value);
         RAM_1780[address&0x7F]=value;
         return;
     }
-    printf("ERROR: Write to %04x, value %02x\n",address,value);
+    printf("EY! W %04x val=%02x\n",address,value);
 }
 
-// 0.27MIPS
-
-// void DisplayMode(void) {
-// 	// GPIO C7 Input with pullup, C0 C1 C2 C3 C4 C5 C6 Output Push-Pull
-// 	uint32_t cc= (
-// 		(GPIO_Speed_10MHz | GPIO_CNF_OUT_PP)<<(4*0) |
-// 		(GPIO_Speed_10MHz | GPIO_CNF_OUT_PP)<<(4*1) |
-// 		(GPIO_Speed_10MHz | GPIO_CNF_OUT_PP)<<(4*2) |
-// 		(GPIO_Speed_10MHz | GPIO_CNF_OUT_PP)<<(4*3) |
-// 		(GPIO_Speed_10MHz | GPIO_CNF_OUT_PP)<<(4*4) |
-// 		(GPIO_Speed_10MHz | GPIO_CNF_OUT_PP)<<(4*5) |
-// 		(GPIO_Speed_10MHz | GPIO_CNF_OUT_PP)<<(4*6) |
-// 		GPIO_CNF_IN_PUPD<<(4*7)
-// 	);
-//     GPIOC->CFGLR=cc;
-//     printf("Displaymode GPIOC->CFGLR=%08lx\n",cc);
-
-//     GPIOC->OUTDR = 0x80;
-// }
-
-// void KeypadMode(void) {
-// 	// GPIO C0 C1 C2 C3 C4 C5 C6 C7 Input with pullup, Output Push-Pull
-// 	GPIOC->CFGLR = (
-// 		GPIO_CNF_IN_PUPD<<(4*0) |
-// 		GPIO_CNF_IN_PUPD<<(4*1) |
-// 		GPIO_CNF_IN_PUPD<<(4*2) |
-// 		GPIO_CNF_IN_PUPD<<(4*3) |
-// 		GPIO_CNF_IN_PUPD<<(4*4) |
-// 		GPIO_CNF_IN_PUPD<<(4*5) |
-// 		GPIO_CNF_IN_PUPD<<(4*6) |
-// 		GPIO_CNF_IN_PUPD<<(4*7) 
-// 	);
-//     GPIOC->OUTDR = 0xFF;
-// }
-
-
-// volatile void Minus1(void) {
-//     printf("Minus1(start)\n");
-//     Delay_Ms(1000);
-// 	uint32_t cc= (
-// 		(GPIO_Speed_10MHz | GPIO_CNF_OUT_PP)<<(4*0) |
-// 		(GPIO_Speed_10MHz | GPIO_CNF_OUT_PP)<<(4*1) |
-// 		(GPIO_Speed_10MHz | GPIO_CNF_OUT_PP)<<(4*2) |
-// 		(GPIO_Speed_10MHz | GPIO_CNF_OUT_PP)<<(4*3) |
-// 		(GPIO_Speed_10MHz | GPIO_CNF_OUT_PP)<<(4*4) |
-// 		(GPIO_Speed_10MHz | GPIO_CNF_OUT_PP)<<(4*5) |
-// 		(GPIO_Speed_10MHz | GPIO_CNF_OUT_PP)<<(4*6) |
-// 		GPIO_CNF_IN_PUPD<<(4*7)
-// 	);
-//     GPIOC->CFGLR=cc;
-//     printf("GPIOC->CFGLR=%08lx\n",cc);
-
-
-//     uint32_t dd = (
-//         GPIO_CNF_IN_PUPD<<(4*0) |
-//         GPIO_CNF_IN_PUPD<<(4*1) |
-//         (GPIO_Speed_10MHz | GPIO_CNF_OUT_PP )<<(4*2) |
-//         (GPIO_Speed_10MHz | GPIO_CNF_OUT_PP )<<(4*3) |
-//         (GPIO_Speed_10MHz | GPIO_CNF_OUT_PP )<<(4*4) |
-//         (GPIO_Speed_10MHz | GPIO_CNF_OUT_PP )<<(4*5) |
-//         (GPIO_Speed_10MHz | GPIO_CNF_OUT_PP )<<(4*6) |
-//         GPIO_CNF_IN_PUPD<<(4*7) 
-// 	);
-//     GPIOD->CFGLR=dd;
-//     printf("GPIOD->CFGLR=%08lx\n",dd);
-
-//     uint32_t ee=4<<3;
-//     printf("GPIOD->BSHR=%08lx\n",ee);
-//     GPIOD->BSHR=ee;
-
-//     uint32_t ff=(1<<(16+0))|(1<<(16+1))|(1<<(16+2))|(1<<(16+3))|(1<<(16+4))|(1<<(16+5))|(1<<(16+6))|(1<<(16+7));    
-//     printf("GPIOC->BSHR=%08lx\n",ff);
-//     GPIOC->BSHR=ff;
-//     // GPIOC->BSHR=(1<<0)|(1<<1)|(1<<2)|(1<<4)|(1<<5);      //M     
-//     Delay_Ms(1000);
-//     printf("Minus1(end)\n");
-// }
+uint8_t data;
 
 int main() {
 	SystemInit();
-    printf("Start\n");
+    // for (int i=0; i<DecimalTest_length; i++) RAM[0x0200+i]=DecimalTest[i];
 
 	// Enable GPIOs
 	RCC->APB2PCENR |= RCC_APB2Periph_GPIOA | RCC_APB2Periph_GPIOC | RCC_APB2Periph_GPIOD;
 
-    // // PA1 --> KEY RS (reset 6502)
-    // // PA2 --> KEY ST (nmi 6502)
-    // //
-	// // GPIO A1 A2 Input with pulldown
-	// GPIOA->CFGLR = (
-	// 	GPIO_CNF_IN_PUPD<<(4*1) |
-	// 	GPIO_CNF_IN_PUPD<<(4*2)
-	// );
-
-    // // PC0 --> PA0 Key Column for 6 D PC
-    // // PC1 --> PA1 Key Column for 5 C GO
-    // // PC2 --> PA2 Key Column for 4 B +
-    // // PC3 --> PA3 Key Column for 3 A DA
-    // // PC4 --> PA4 Key Column for 2 9 AD
-    // // PC5 --> PA5 Key Column for 1 8 F 
-    // // PC6 --> PA6 Key Column for 0 7 E 
-    // // PC7 --> PA7 TTY In 
-    // //
-    // DisplayMode();
-
-    // // PD0 
-    // // PD1 
-    // // PD2 --> PB0 TTY Out 
-    // // PD3 --> PB1 Display/Key Row mux LSB  
-    // // PD4 --> PB2 Display/Key Row mux 
-    // // PD5 --> PB3 Display/Key Row mux 
-    // // PD6 --> PB4 Display/Key Row mux MSB 
-    // // PD7 --> SST
-	// // GPIO D0 D1 D7 Input with pulldown D2 D3 D4 D5 D5 Output Push-Pull
-
-//-------------------------------------------
-
-    // uint32_t ee=4<<3;
-    // printf("GPIOD->BSHR=%08lx\n",ee);
-    // GPIOD->BSHR=ee;
-    // uint32_t ff=(1<<(16+0))|(1<<(16+1))|(1<<(16+2))|(1<<(16+3))|(1<<(16+4))|(1<<(16+5))|(1<<(16+6))|(1<<(16+7));    
-    // printf("xGPIOC->BSHR=%08lx\n",ff);
-    // GPIOC->BSHR=ff;
-    // GPIOC->BSHR=(1<<0)|(1<<1)|(1<<2)|(1<<4)|(1<<5);      //M     
-    // for(;;);
-//-------------------------------------------
-
-    // printf("Loop Start\n");
-
-	// uint32_t dd = (
-	// 	GPIO_CNF_IN_PUPD<<(4*0) |
-	// 	GPIO_CNF_IN_PUPD<<(4*1) |
-	// 	(GPIO_Speed_10MHz | GPIO_CNF_OUT_PP )<<(4*2) |
-	// 	(GPIO_Speed_10MHz | GPIO_CNF_OUT_PP )<<(4*3) |
-	// 	(GPIO_Speed_10MHz | GPIO_CNF_OUT_PP )<<(4*4) |
-	// 	(GPIO_Speed_10MHz | GPIO_CNF_OUT_PP )<<(4*5) |
-	// 	(GPIO_Speed_10MHz | GPIO_CNF_OUT_PP )<<(4*6) |
-	// 	GPIO_CNF_IN_PUPD<<(4*7) 
-	// );
-    // MUX_DIR=dd;
-    // printf("MUX_DIR=%08lx\n",dd);
-
-
-	// uint32_t cc= (
-	// 	(GPIO_Speed_10MHz | GPIO_CNF_OUT_PP)<<(4*0) |
-	// 	(GPIO_Speed_10MHz | GPIO_CNF_OUT_PP)<<(4*1) |
-	// 	(GPIO_Speed_10MHz | GPIO_CNF_OUT_PP)<<(4*2) |
-	// 	(GPIO_Speed_10MHz | GPIO_CNF_OUT_PP)<<(4*3) |
-	// 	(GPIO_Speed_10MHz | GPIO_CNF_OUT_PP)<<(4*4) |
-	// 	(GPIO_Speed_10MHz | GPIO_CNF_OUT_PP)<<(4*5) |
-	// 	(GPIO_Speed_10MHz | GPIO_CNF_OUT_PP)<<(4*6) |
-	// 	GPIO_CNF_IN_PUPD<<(4*7)
-	// );
-    // KEYSEG_DIR=cc;
-    // printf("KEYSEG_DIR=%08lx\n",cc);
-
-
-    // // for (;;) {
-
-    //     int i=4;
-    //     // for (int i=4; i<10; i++) {
-
-    //         uint32_t qq=(1<<(16+3))|(1<<(16+4))|(1<<(16+5))|(1<<(16+6)) | (i<<3);
-    //         qq=0x20;
-    //         printf("MUX=%08lx\n",qq);
-    //         MUX=qq;
-    //         Delay_Ms(100);
-    //         // GPIOD->BSHR=i<<3;    
-
-    //         // uint32_t ww=(1<<(16+0))|(1<<(16+1))|(1<<(16+2))|(1<<(16+3))|(1<<(16+4))|(1<<(16+5))|(1<<(16+6))|(1<<(16+7));    
-    //         uint32_t ww=(1<<(0))|(1<<(16+1))|(1<<(16+2))|(1<<(16+3))|(1<<(16+4))|(1<<(16+5))|(1<<(16+6))|(1<<(16+7));    
-    //         printf("KEYSEG=%08lx\n",ww);
-    //         KEYSEG=ww;
-
-    //         // // GPIOC->BSHR=(1<<0)|(1<<1)|(1<<2)|(1<<3)|(1<<4)|(1<<5)|(1<<6);    
-    //         // uint32_t eee=(1<<0)|(1<<3)|(1<<4)|(1<<5);        //C
-    //         // printf("GPIOC->BSHR=%08lx\n",eee);
-    //         // GPIOC->BSHR=eee;
-    //         // if (i==5) GPIOC->BSHR=(1<<2)|(1<<4)|(1<<5)|(1<<6);        //h   
-    //         // if (i==6) GPIOC->BSHR=(1<<4);                             //i  
-    //         // if (i==7) GPIOC->BSHR=(1<<0)|(1<<1)|(1<<2)|(1<<4)|(1<<5);      //M     
-    //         // if (i==8) GPIOC->BSHR=(1<<6);                           // -
-    //         // if (i==9) GPIOC->BSHR=(1<<1)|(1<<2);                    // 1    
-    //         Delay_Ms(500);
-    //     // }
-    // // }
-    // Delay_Ms(1000);
-    // printf("Loop End\n");
-
-    // for (;;);
-
-    // Minus1();
-
-    // for (;;) {
-    //     DisplayMode();
-    //     GPIOD->BSHR=(1<<(16+3))|(1<<(16+4))|(1<<(16+5))|(1<<(16+6));    
-    //     Delay_Ms(100);
-
-    //     KeypadMode();
-    //     Delay_Ms(1);
-
-    //     GPIOD->BSHR=(1<<(16+3))|(1<<(16+4))|(1<<(16+5))|(1<<(16+6));    
-    //     Delay_Ms(1);
-    //     printf("%02x ",(~(GPIOC->INDR))&0xff );
-
-    //     GPIOD->BSHR=(1<<(16+3))|(1<<(16+4))|(1<<(16+5))|(1<<(16+6));    
-    //     GPIOD->BSHR =(1<<3);
-    //     Delay_Ms(1);
-    //     printf("%02x ",(~(GPIOC->INDR))&0xff );
-
-    //     GPIOD->BSHR=(1<<(16+3))|(1<<(16+4))|(1<<(16+5))|(1<<(16+6));    
-    //     GPIOD->BSHR =(1<<4);
-    //     Delay_Ms(1);
-    //     printf("%02x ",(~(GPIOC->INDR))&0xff );
-
-    //     GPIOD->BSHR=(1<<(16+3))|(1<<(16+4))|(1<<(16+5))|(1<<(16+6));    
-    //     GPIOD->BSHR =(1<<3);
-    //     GPIOD->BSHR =(1<<4);
-    //     Delay_Ms(1);
-    //     printf("%02x\n",(~(GPIOC->INDR))&0xff );
-
-    // }
-
-
-// Displaymode GPIOC->CFGLR=81111111
-// Displaymode GPIOD->CFGLR=81111188
-// GPIOD->BSHR=00000020                 
-// GPIOC->BSHR=00ff0000
-
-// Write to PBDD, value 7c GPIOD->CFGLR=81111188
-// Write to SBD, value 40 GPIOD->BSHR=00bf0040
-// Write to PADD, value 7f GPIOC->CFGLR=81111111
-// Write to SAD, value 00 GPIOC->BSHR=00ff0000
-
-// 6530-002 PB0 TTY Out
-// 6530-002 PB1 Display/Key Row mux LSB 
-// 6530-002 PB2 Display/Key Row mux
-// 6530-002 PB3 Display/Key Row mux
-// 6530-002 PB4 Display/Key Row mux MSB
-// 6530-002 PB5
-// 6530-002 PB6 N/A
-// 6530-002 PB7 
-
-
-
-// 6530-002 PA0 Key Column for 6 D PC
-// 6530-002 PA1 Key Column for 5 C GO
-// 6530-002 PA2 Key Column for 4 B +
-// 6530-002 PA3 Key Column for 3 A DA
-// 6530-002 PA4 Key Column for 2 9 AD
-// 6530-002 PA5 Key Column for 1 8 F
-// 6530-002 PA6 Key Column for 0 7 E
-// 6530-002 PA7 TTY In
-
-// printf("Write6502 Start\n");
-// write6502(PADD,0b01111111);
-// write6502(PBDD, 0b00011111);
-// write6502(SBD,0b00001000);
-// write6502(SAD ,0b01110000);
-// Delay_Ms(2500);
-// printf("Write6502 End\n");
-
-
+    if (TRACE) printf("Start\n");
     reset6502();
 
-RAM[0x90]=0x7e;
-RAM[0x91]=0x7e;
-RAM[0x92]=0x7e;
-RAM[0x93]=0x7e;
-RAM[0x94]=0x7e;
-RAM[0x95]=0x7e;
+    write6502(0x17fa,0x00);
+    write6502(0x17fb,0x1C);
+    write6502(0x17fe,0x00);
+    write6502(0x17ff,0x1C);
 
+    write6502(PADD, 0b01111111);
+    write6502(PBDD, 0b00011111);
+    write6502(SBD,  0b00001000);
+    write6502(SAD , 0b01000000);
+    Delay_Ms(500);
 
-RAM[0x200]=0x84; RAM[0x201]=0x7F;                   //LIGHT  STY YSAV    save register
-RAM[0x202]=0xA0; RAM[0x203]=0x13;                   //       LDY #$13
-RAM[0x204]=0xA2; RAM[0x205]=0x05;                   //       LDX #$5     6 digits to show
-RAM[0x206]=0xA9; RAM[0x207]=0x7F;                   //       LDA #$7F
-RAM[0x208]=0x8D; RAM[0x209]=0x41; RAM[0x20A]=0x17;  //       STA PADD    set directional reg
-RAM[0x20B]=0xB5; RAM[0x20C]=0x90;                   //DIGIT  LDA WINDOW,X
-RAM[0x20D]=0x8D; RAM[0x20E]=0x40; RAM[0x20F]=0x17;  //       STA SAD     character segments
-RAM[0x210]=0x8C; RAM[0x211]=0x42; RAM[0x212]=0x17;  //       STY SBD     character ID    
-RAM[0x213]=0xE6; RAM[0x214]=0x7B;                   //WAIT   INC PAUSE
-RAM[0x215]=0xD0; RAM[0x216]=0xFC;                   //       BNE WAIT    wait loop
-// RAM[0x215]=0xEA; RAM[0x216]=0xEA;                   //       nopnop
-RAM[0x217]=0x88; RAM[0x218]=0x88;                   //       DEY DEY  
-RAM[0x219]=0xCA;                                    //       DEX
-RAM[0x21A]=0x10; RAM[0x21B]=0xEF;                   //       BPL DIGIT
-RAM[0x21C]=0x00;                                    //       BRK
+//    0200 D8       START CLD         clr dc mode
+//    0201 A9 00          LDA #0      zero into A
+//    0203 85 FB    STORE STA POINTH
+//    0205 85 FA          STA POINTL
+//    0207 85 F9          STA INH
+//    0209 20 1F 1F       JSR SCANDS  light display
+//    020C 20 6A 1F       JSR GETKEY  test keys
+//    020F 4C 03 02       JMP STORE
+// pc=0x200;
+// RAM[0x200]=0xD8;
+// RAM[0x201]=0xA9; RAM[0x202]=0x00;
+// RAM[0x203]=0x85; RAM[0x204]=0xFB;
+// RAM[0x205]=0x85; RAM[0x206]=0xFA;
+// RAM[0x207]=0x85; RAM[0x208]=0xF9;
+// RAM[0x209]=0x20; RAM[0x20A]=0x1F; RAM[0x20B]=0x1F;
+// RAM[0x20C]=0x20; RAM[0x20D]=0x6A; RAM[0x20E]=0x1F;
+// RAM[0x20F]=0x4C; RAM[0x210]=0x03; RAM[0x211]=0x02;
 
+// RAM[0x10]=0xAA;
+// RAM[0x11]=0x55;
+// RAM[0x200]=0xA5; RAM[0x201]=0x10;
+// RAM[0x202]=0x85; RAM[0x203]=0xFB;
+// RAM[0x204]=0x85; RAM[0x205]=0xFA;
+// RAM[0x206]=0x85; RAM[0x207]=0xF9;
+// RAM[0x208]=0x00;
 
+int p=0x200;
+RAM[p++]=0xA2;RAM[p++]=0x0D;RAM[p++]=0xBD;RAM[p++]=0xCC;RAM[p++]=0x02;RAM[p++]=0x95;RAM[p++]=0xD5;RAM[p++]=0xCA;RAM[p++]=0x10;RAM[p++]=0xF8;RAM[p++]=0xA2;RAM[p++]=0x05;RAM[p++]=0xA0;RAM[p++]=0x01;RAM[p++]=0xF8;RAM[p++]=0x18;RAM[p++]=0xB5;RAM[p++]=0xD5;RAM[p++]=0x75;RAM[p++]=0xD7;RAM[p++]=0x95;RAM[p++]=0xD5;RAM[p++]=0xCA;RAM[p++]=0x88; 
+RAM[p++]=0x10;RAM[p++]=0xF6;RAM[p++]=0xB5;RAM[p++]=0xD8;RAM[p++]=0x10;RAM[p++]=0x02;RAM[p++]=0xA9;RAM[p++]=0x99;RAM[p++]=0x75;RAM[p++]=0xD5;RAM[p++]=0x95;RAM[p++]=0xD5;RAM[p++]=0xCA;RAM[p++]=0x10;RAM[p++]=0xE5;RAM[p++]=0xA5;RAM[p++]=0xD5;RAM[p++]=0x10;RAM[p++]=0x0D;RAM[p++]=0xA9;RAM[p++]=0x00;RAM[p++]=0x85;RAM[p++]=0xE2;RAM[p++]=0xA2; 
+RAM[p++]=0x02;RAM[p++]=0x95;RAM[p++]=0xD5;RAM[p++]=0x95;RAM[p++]=0xDB;RAM[p++]=0xCA;RAM[p++]=0x10;RAM[p++]=0xF9;RAM[p++]=0x38;RAM[p++]=0xA5;RAM[p++]=0xE0;RAM[p++]=0xE5;RAM[p++]=0xDD;RAM[p++]=0x85;RAM[p++]=0xE0;RAM[p++]=0xA2;RAM[p++]=0x01;RAM[p++]=0xB5;RAM[p++]=0xDE;RAM[p++]=0xE9;RAM[p++]=0x00;RAM[p++]=0x95;RAM[p++]=0xDE;RAM[p++]=0xCA; 
+RAM[p++]=0x10;RAM[p++]=0xF7;RAM[p++]=0xB0;RAM[p++]=0x0C;RAM[p++]=0xA9;RAM[p++]=0x00;RAM[p++]=0xA2;RAM[p++]=0x03;RAM[p++]=0x95;RAM[p++]=0xDD;RAM[p++]=0xCA;RAM[p++]=0x10;RAM[p++]=0xFB;RAM[p++]=0x20;RAM[p++]=0xBD;RAM[p++]=0x02;RAM[p++]=0xA5;RAM[p++]=0xDE;RAM[p++]=0xA6;RAM[p++]=0xDF;RAM[p++]=0x09;RAM[p++]=0xF0;RAM[p++]=0xA4;RAM[p++]=0xE1; 
+RAM[p++]=0xF0;RAM[p++]=0x20;RAM[p++]=0xF0;RAM[p++]=0x9C;RAM[p++]=0xF0;RAM[p++]=0xA4;RAM[p++]=0xA2;RAM[p++]=0xFE;RAM[p++]=0xA0;RAM[p++]=0x5A;RAM[p++]=0x18;RAM[p++]=0xA5;RAM[p++]=0xD9;RAM[p++]=0x69;RAM[p++]=0x05;RAM[p++]=0xA5;RAM[p++]=0xD8;RAM[p++]=0x69;RAM[p++]=0x00;RAM[p++]=0xB0;RAM[p++]=0x04;RAM[p++]=0xA2;RAM[p++]=0xAD;RAM[p++]=0xA0; 
+RAM[p++]=0xDE;RAM[p++]=0x98;RAM[p++]=0xA4;RAM[p++]=0xE2;RAM[p++]=0xF0;RAM[p++]=0x04;RAM[p++]=0xA5;RAM[p++]=0xD5;RAM[p++]=0xA6;RAM[p++]=0xD6;RAM[p++]=0x85;RAM[p++]=0xFB;RAM[p++]=0x86;RAM[p++]=0xFA;RAM[p++]=0xA5;RAM[p++]=0xD9;RAM[p++]=0xA6;RAM[p++]=0xD8;RAM[p++]=0x10;RAM[p++]=0x05;RAM[p++]=0x38;RAM[p++]=0xA9;RAM[p++]=0x00;RAM[p++]=0xE5; 
+RAM[p++]=0xD9;RAM[p++]=0x85;RAM[p++]=0xF9;RAM[p++]=0xA9;RAM[p++]=0x02;RAM[p++]=0x85;RAM[p++]=0xE3;RAM[p++]=0xD8;RAM[p++]=0x20;RAM[p++]=0x1F;RAM[p++]=0x1F;RAM[p++]=0x20;RAM[p++]=0x6A;RAM[p++]=0x1F;RAM[p++]=0xC9;RAM[p++]=0x13;RAM[p++]=0xF0;RAM[p++]=0xC0;RAM[p++]=0xB0;RAM[p++]=0x03;RAM[p++]=0x20;RAM[p++]=0xAD;RAM[p++]=0x02;RAM[p++]=0xC6; 
+RAM[p++]=0xE3;RAM[p++]=0xD0;RAM[p++]=0xED;RAM[p++]=0xF0;RAM[p++]=0xB7;RAM[p++]=0xC9;RAM[p++]=0x0A;RAM[p++]=0x90;RAM[p++]=0x05;RAM[p++]=0x49;RAM[p++]=0x0F;RAM[p++]=0x85;RAM[p++]=0xE1;RAM[p++]=0x60;RAM[p++]=0xAA;RAM[p++]=0xA5;RAM[p++]=0xDD;RAM[p++]=0xF0;RAM[p++]=0xFA;RAM[p++]=0x86;RAM[p++]=0xDD;RAM[p++]=0xA5;RAM[p++]=0xDD;RAM[p++]=0x38; 
+RAM[p++]=0xF8;RAM[p++]=0xE9;RAM[p++]=0x05;RAM[p++]=0x85;RAM[p++]=0xDC;RAM[p++]=0xA9;RAM[p++]=0x00;RAM[p++]=0xE9;RAM[p++]=0x00;RAM[p++]=0x85;RAM[p++]=0xDB;RAM[p++]=0x60;RAM[p++]=0x45;RAM[p++]=0x01;RAM[p++]=0x00;RAM[p++]=0x99;RAM[p++]=0x81;RAM[p++]=0x00;RAM[p++]=0x99;RAM[p++]=0x97;RAM[p++]=0x02;RAM[p++]=0x08;RAM[p++]=0x00;RAM[p++]=0x00; 
+RAM[p++]=0x01;RAM[p++]=0x01;
+//;00000A000A
 
-    if (TRACE) printf("Start\n");
-    write6502(PBDD, 0b11111111);
-    // pc=0x200;
+    RAM[0xFA]=0x00;
+    RAM[0xFB]=0x02;
+
+    // RAM[0xFA]=0x97;
+    // RAM[0xFB]=0x03;
+    
     for (;;) {
-        // if (pc==0x1e88) printf("INITS\n");
-        // if (pc==0x1c8c) printf("INIT1\n");
-        // if (pc==0x1F19) printf("SCAND\n");
-        // if (pc==0x1F6A) printf("GETKEY\n");
-        // if (pc==0x1F7A) printf("KEYIN\n");
-        // if (pc==0x1C77) printf("TTYKB\n");
-        // if (pc==0x1F48) printf("CONVD\n");
+        if (GTRACE) {
+            if (pc==0x1c4f) printf("START\n");
+            if (pc==0x1e88) printf("INITS\n");
+            if (pc==0x1c8c) printf("INIT1\n");
+            if (pc==0x1F19) printf("SCAND\n");
+            if (pc==0x1F6A) printf("GETKEY\n");
+            if (pc==0x1F7A) printf("KEYIN\n");
+            if (pc==0x1C77) printf("TTYKB\n");
+            if (pc==0x1F48) printf("CONVD\n");
+        }
         exec6502(1);
         pc=pc&0xffff;
         x=x&0xff;
         y=y&0xff;
-        // printf("PC=%04x A=%02x X=%02x Y=%02x\n",pc,a,x,y);
+        // if (pc<1024) printf("PC=%04x A=%02x X=%02x Y=%02x N1=%02x N2=%02x DA=%02x AR=%02x\n",pc,a,x,y,RAM[0x211],RAM[0x212],RAM[0x215],RAM[0x213]);
+
+        // if (pc<1024) printf("PC=%04x N1=%02x N2=%02x DA=%02x AR=%02x\n",pc,RAM[0x211],RAM[0x212],RAM[0x213],RAM[0x214]);
+
+        // if (pc==0x302) {
+        //     printf("N1H=%d N1L=%d N2H=%d,%d N2L=%d\n",RAM[0x0219],RAM[0x021a],RAM[0x021f],RAM[0x0220],RAM[0x021b]);
+        // }
+        // if (pc>=0x302 && pc<=0x321) {
+        //     printf("PC=%04x a=%02x x=%02x y=%02x ",pc,a,x,y);
+        //     printStatus();
+        //     printf("\n");
+        // }
+
+        // if (pc==0x205) for(;;);
+        // poll_input();
+        // Delay_Us(20);
     }
-    if (TRACE) printf("End\n");
  
 }
 
+void handle_debug_input( int numbytes, uint8_t * xdata ) { 
+
+    if (numbytes>0) {
+        if (*xdata==27) {
+            write6502(SAD , 0b00000000);
+            for(;;);
+        }
+    }
+}
 
 
 

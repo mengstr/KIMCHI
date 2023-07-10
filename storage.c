@@ -88,9 +88,8 @@ int flash() {
 	printf( "%d cycles for buffer reset\n", stop - start );
 
 
-	int i;
 	start = SysTick->CNT;
-	for( i = 0; i < 16; i++ )
+	for(int i = 0; i < 16; i++ )
 	{
 		ptr[i] = 0xabcd1234 + i; //Write to the memory
 		FLASH->CTLR = CR_PAGE_PG | FLASH_CTLR_BUF_LOAD; // Load the buffer.
@@ -121,6 +120,6 @@ int flash() {
     dump((uint32_t)buf,2);
     for (int i=0; i<sizeof(buf); i+=256) printf( "%d ",buf[i]);
 
-    	printf( "\nTest results: %s %d\n", testok?"PASS":"FAIL",buf[i]);
+	printf( "\nTest results: %s %d\n", testok?"PASS":"FAIL",buf[0]);
 	while(1);
 }

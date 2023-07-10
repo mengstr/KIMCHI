@@ -17,19 +17,17 @@ extern int TRACE;
 
 #define BASE_STACK     0x100
 
-#define saveaccum(n) a = (uint_fast8_t)((n) & 0x00FF)
+#define saveaccum(n) a = (uint8_t)((n) & 0x00FF)
 
 
 //flag modifier macros
 #define setcarry() status |= FLAG_CARRY
-#define clearcarry() status &= (~FLAG_CARRY)
+#define clearcarry() status&=(~FLAG_CARRY)
 #define setzero() status |= FLAG_ZERO
 #define clearzero() status &= (~FLAG_ZERO)
 #define setinterrupt() status |= FLAG_INTERRUPT
 #define clearinterrupt() status &= (~FLAG_INTERRUPT)
-#define setdecimal() status |= FLAG_DECIMAL
-#define cleardecimal() status &= (~FLAG_DECIMAL)
-#define setoverflow() status |= FLAG_OVERFLOW
+#define setoverflow() status|=FLAG_OVERFLOW
 #define clearoverflow() status &= (~FLAG_OVERFLOW)
 #define setsign() status |= FLAG_SIGN
 #define clearsign() status &= (~FLAG_SIGN)
@@ -52,56 +50,56 @@ extern int TRACE;
 }
 
 #define overflowcalc(n, m, o) { /* n = result, m = accumulator, o = memory */ \
-    if (((n) ^ (uint_fast16_t)(m)) & ((n) ^ (o)) & 0x0080) setoverflow();\
+    if (((n) ^ (uint16_t)(m)) & ((n) ^ (o)) & 0x0080) setoverflow();\
         else clearoverflow();\
 }
 
 
 //6502 CPU registers
-uint_fast16_t pc; 
-uint_fast8_t sp, a, x, y, status; 
+uint16_t pc; 
+uint8_t sp, a, x, y, status; 
  
  
 //helper variables
 uint32_t instructions = 0; //keep track of total instructions executed
-uint_fast16_t ea, reladdr, value, result;
-uint_fast8_t opcode;
+uint16_t ea, reladdr, value, result;
+uint8_t opcode;
 
 //externally supplied functions
-extern uint_fast8_t read6502(uint_fast16_t address);
-extern void write6502(uint_fast16_t address, uint_fast8_t value);
+extern uint8_t read6502(uint16_t address);
+extern void write6502(uint16_t address, uint8_t value);
 
-void setPC(uint_fast16_t address) {pc=address;};
+void setPC(uint16_t address) {pc=address;};
 
 
 //a few general functions used by various other functions
-void push16(uint_fast16_t pushval) {
+void push16(uint16_t pushval) {
     write6502(BASE_STACK + sp, (pushval >> 8));
     write6502(BASE_STACK + ((sp - 1) & 0xFF), pushval);
     sp -= 2;
 }
 
-void push8(uint_fast8_t pushval) {
+void push8(uint8_t pushval) {
     write6502(BASE_STACK + sp--, pushval);
 }
 
-uint_fast16_t pull16() {
-    uint_fast16_t temp16;
-    temp16 = read6502(BASE_STACK + ((sp + 1) & 0xFF)) | ((uint_fast16_t)read6502(BASE_STACK + ((sp + 2) & 0xFF)) << 8);
+uint16_t pull16() {
+    uint16_t temp16;
+    temp16 = read6502(BASE_STACK + ((sp + 1) & 0xFF)) | ((uint16_t)read6502(BASE_STACK + ((sp + 2) & 0xFF)) << 8);
     sp += 2;
     return(temp16);
 }
 
-uint_fast8_t pull8() {
+uint8_t pull8() {
     return (read6502(BASE_STACK + ++sp));
 }
 
 void reset6502() {
-    pc = (uint_fast16_t)read6502(0xFFFC) | ((uint_fast16_t)read6502(0xFFFD) << 8);
+    pc = (uint16_t)read6502(0xFFFC) | ((uint16_t)read6502(0xFFFD) << 8);
     a = 0;
     x = 0;
     y = 0;
-    sp = 0xFD;
+    sp = 0xFF;
     status |= FLAG_CONSTANT;
 }
 
@@ -114,98 +112,122 @@ static void imm() { //immediate
 }
 
 static void zp() { //zero-page
-    ea = (uint_fast16_t)read6502((uint_fast16_t)pc++);
+    ea = (uint16_t)read6502((uint16_t)pc++);
 }
 
 static void zpx() { //zero-page,X
-    ea = ((uint_fast16_t)read6502((uint_fast16_t)pc++) + (uint_fast16_t)x) & 0xFF; //zero-page wraparound
+    ea = ((uint16_t)read6502((uint16_t)pc++) + (uint16_t)x) & 0xFF; //zero-page wraparound
 }
 
 static void zpy() { //zero-page,Y
-    ea = ((uint_fast16_t)read6502((uint_fast16_t)pc++) + (uint_fast16_t)y) & 0xFF; //zero-page wraparound
+    ea = ((uint16_t)read6502((uint16_t)pc++) + (uint16_t)y) & 0xFF; //zero-page wraparound
 }
 
 static void rel() { //relative for branch ops (8-bit immediate value, sign-extended)
-    reladdr = (uint_fast16_t)read6502(pc++);
+    reladdr = (uint16_t)read6502(pc++);
     if (reladdr & 0x80) reladdr |= 0xFF00;
 }
 
 static void abso() { //absolute
-    ea = (uint_fast16_t)read6502(pc) | ((uint_fast16_t)read6502(pc+1) << 8);
+    ea = (uint16_t)read6502(pc) | ((uint16_t)read6502(pc+1) << 8);
     pc += 2;
 }
 
 static void absx() { //absolute,X
-    ea = ((uint_fast16_t)read6502(pc) | ((uint_fast16_t)read6502(pc+1) << 8));
-    ea += (uint_fast16_t)x;
+    ea = ((uint16_t)read6502(pc) | ((uint16_t)read6502(pc+1) << 8));
+    ea += (uint16_t)x;
     pc += 2;
 }
 
 static void absy() { //absolute,Y
-    ea = ((uint_fast16_t)read6502(pc) | ((uint_fast16_t)read6502(pc+1) << 8));
-    ea += (uint_fast16_t)y;
+    ea = ((uint16_t)read6502(pc) | ((uint16_t)read6502(pc+1) << 8));
+    ea += (uint16_t)y;
     pc += 2;
 }
 
 static void ind() { //indirect
-    uint_fast16_t eahelp, eahelp2;
-    eahelp = (uint_fast16_t)read6502(pc) | (uint_fast16_t)((uint_fast16_t)read6502(pc+1) << 8);
+    uint16_t eahelp, eahelp2;
+    eahelp = (uint16_t)read6502(pc) | (uint16_t)((uint16_t)read6502(pc+1) << 8);
     eahelp2 = (eahelp & 0xFF00) | ((eahelp + 1) & 0x00FF); //replicate 6502 page-boundary wraparound bug
-    ea = (uint_fast16_t)read6502(eahelp) | ((uint_fast16_t)read6502(eahelp2) << 8);
+    ea = (uint16_t)read6502(eahelp) | ((uint16_t)read6502(eahelp2) << 8);
     pc += 2;
 }
 
 static void indx() { // (indirect,X)
-    uint_fast16_t eahelp;
-    eahelp = (uint_fast16_t)(((uint_fast16_t)read6502(pc++) + (uint_fast16_t)x) & 0xFF); //zero-page wraparound for table pointer
-    ea = (uint_fast16_t)read6502(eahelp & 0x00FF) | ((uint_fast16_t)read6502((eahelp+1) & 0x00FF) << 8);
+    uint16_t eahelp;
+    eahelp = (uint16_t)(((uint16_t)read6502(pc++) + (uint16_t)x) & 0xFF); //zero-page wraparound for table pointer
+    ea = (uint16_t)read6502(eahelp & 0x00FF) | ((uint16_t)read6502((eahelp+1) & 0x00FF) << 8);
 }
 
 static void indy() { // (indirect),Y
-    uint_fast16_t eahelp, eahelp2;
-    eahelp = (uint_fast16_t)read6502(pc++);
+    uint16_t eahelp, eahelp2;
+    eahelp = (uint16_t)read6502(pc++);
     eahelp2 = (eahelp & 0xFF00) | ((eahelp + 1) & 0x00FF); //zero-page wraparound
-    ea = (uint_fast16_t)read6502(eahelp) | ((uint_fast16_t)read6502(eahelp2) << 8);
-    ea += (uint_fast16_t)y;
+    ea = (uint16_t)read6502(eahelp) | ((uint16_t)read6502(eahelp2) << 8);
+    ea += (uint16_t)y;
 }
 
+
+// 7  bit  0
+// ---- ----
+// NVss DIZC
+// |||| ||||
+// |||| |||+- Carry
+// |||| ||+-- Zero
+// |||| |+--- Interrupt Disable
+// |||| +---- Decimal
+// ||++------ No CPU effect, see: the B flag
+// |+-------- Overflow
+// +--------- Negative
+
+void printStatus(void) {
+    printf("%c%c%c%c%c%c",
+        (status&FLAG_SIGN)?'N':'n',
+        (status&FLAG_OVERFLOW)?'O':'o',
+        (status&FLAG_DECIMAL)?'D':'d',
+        (status&FLAG_INTERRUPT)?'I':'i',
+        (status&FLAG_ZERO)?'Z':'z',
+        (status&FLAG_CARRY)?'C':'c'
+    );
+}
 
 
 //instruction handler functions
+
 static void adc() {
-    value = ((uint_fast16_t)read6502(ea));
-    result = (uint_fast16_t)a + value + (uint_fast16_t)(status & FLAG_CARRY);
-   
-    carrycalc(result);
-    zerocalc(result);
-    overflowcalc(result, a, value);
-    signcalc(result);
-    
-    if (status & FLAG_DECIMAL) {
-        clearcarry();
-        
-        if ((result & 0x0F) > 0x09) {
-            result += 0x06;
-        }
-        if ((result & 0xF0) > 0x90) {
-            result += 0x60;
-            setcarry();
-        }
+    uint16_t v = ((uint16_t)read6502(ea));
+    uint16_t c = (uint16_t)(status&FLAG_CARRY);
+    uint16_t res = (uint16_t)a + v + c;
+
+    if (status&FLAG_DECIMAL) {
+        uint16_t al = (a & 0x0F) + (v & 0x0F) + c;
+        if (al > 9) al += 6;
+        uint16_t ah = (a >> 4) + (v >> 4) + ((al > 15) ? 1 : 0);
+        zerocalc(res);
+        if ((ah & 8) == 0) status &= (~FLAG_SIGN); else status |= FLAG_SIGN;
+        if ((~(a ^ v) & (a ^ (ah << 4)) & 0x80) != 0) status|=FLAG_OVERFLOW; else status&=(~FLAG_OVERFLOW);
+        if (ah > 9) ah += 6;
+        if (ah > 15) status|=FLAG_CARRY; else status&=(~FLAG_CARRY);
+        a = (uint8_t)((ah << 4) | (al & 15)) & 0xFF;
+    } else {
+        zerocalc(res);
+        signcalc(res);
+        overflowcalc(res, a, v);
+        carrycalc(res);
+        a = (uint8_t)((res) & 0x00FF);
     }
-   
-    saveaccum(result);
 }
 
 static void and() {
-    value = ((uint_fast16_t)read6502(ea));
-    result = (uint_fast16_t)a & value;
+    value = ((uint16_t)read6502(ea));
+    result = (uint16_t)a & value;
     zerocalc(result);
     signcalc(result);
     saveaccum(result);
 }
 
 static void asl() {
-    value = ((uint_fast16_t)read6502(ea));
+    value = ((uint16_t)read6502(ea));
     result = value << 1;
     carrycalc(result);
     zerocalc(result);
@@ -214,22 +236,22 @@ static void asl() {
 }
 
 static void aslAcc() {
-    value = (uint_fast16_t)a;
+    value = (uint16_t)a;
     result = value << 1;
     carrycalc(result);
     zerocalc(result);
     signcalc(result);
-    a=(uint_fast8_t)(result & 0x00FF);
+    a=(uint8_t)(result & 0x00FF);
 }
 
 static void bcc() {
-    if ((status & FLAG_CARRY) == 0) {
+    if ((status&FLAG_CARRY) == 0) {
         pc += reladdr;
     }
 }
 
 static void bcs() {
-    if ((status & FLAG_CARRY) == FLAG_CARRY) {
+    if ((status&FLAG_CARRY) == FLAG_CARRY) {
         pc += reladdr;
     }
 }
@@ -241,11 +263,11 @@ static void beq() {
 }
 
 static void bit() {
-    value = ((uint_fast16_t)read6502(ea));
-    result = (uint_fast16_t)a & value;
+    value = ((uint16_t)read6502(ea));
+    result = (uint16_t)a & value;
    
     zerocalc(result);
-    status = (status & 0x3F) | (uint_fast8_t)(value & 0xC0);
+    status = (status & 0x3F) | (uint8_t)(value & 0xC0);
 }
 
 static void bmi() {
@@ -267,13 +289,13 @@ static void bpl() {
 }
 
 static void brk() {
-    printf("iCnt=%ld PC=%04x A=%02x X=%02x Y=%02x\n",instructions,pc,a,x,y);
-    for(;;);
-    // pc++;
-    // push16(pc); //push next instruction address onto stack
-    // push8(status | FLAG_BREAK); //push CPU status to stack
-    // setinterrupt(); //set interrupt flag
-    // pc = (uint_fast16_t)read6502(0xFFFE) | ((uint_fast16_t)read6502(0xFFFF) << 8);
+    // printf("iCnt=%ld PC=%04x A=%02x X=%02x Y=%02x\n",instructions,pc,a,x,y);
+    // for(;;);
+    pc++;
+    push16(pc); //push next instruction address onto stack
+    push8(status | FLAG_BREAK); //push CPU status to stack
+    setinterrupt(); //set interrupt flag
+    pc = (uint16_t)read6502(0xFFFE) | ((uint16_t)read6502(0xFFFF) << 8);
 }
 
 static void bvc() {
@@ -293,7 +315,7 @@ static void clc() {
 }
 
 static void cld() {
-    cleardecimal();
+    status &= (~FLAG_DECIMAL);
 }
 
 static void cli() {
@@ -305,40 +327,40 @@ static void clv() {
 }
 
 static void cmp() {
-    value = ((uint_fast16_t)read6502(ea));
-    result = (uint_fast16_t)a - value;
+    value = ((uint16_t)read6502(ea));
+    result = (uint16_t)a - value;
    
-    if (a >= (uint_fast8_t)(value & 0x00FF)) setcarry();
+    if (a >= (uint8_t)(value & 0x00FF)) setcarry();
         else clearcarry();
-    if (a == (uint_fast8_t)(value & 0x00FF)) setzero();
+    if (a == (uint8_t)(value & 0x00FF)) setzero();
         else clearzero();
     signcalc(result);
 }
 
 static void cpx() {
-    value = ((uint_fast16_t)read6502(ea));
-    result = (uint_fast16_t)x - value;
+    value = ((uint16_t)read6502(ea));
+    result = (uint16_t)x - value;
    
-    if (x >= (uint_fast8_t)(value & 0x00FF)) setcarry();
+    if (x >= (uint8_t)(value & 0x00FF)) setcarry();
         else clearcarry();
-    if (x == (uint_fast8_t)(value & 0x00FF)) setzero();
+    if (x == (uint8_t)(value & 0x00FF)) setzero();
         else clearzero();
     signcalc(result);
 }
 
 static void cpy() {
-    value = ((uint_fast16_t)read6502(ea));
-    result = (uint_fast16_t)y - value;
+    value = ((uint16_t)read6502(ea));
+    result = (uint16_t)y - value;
    
-    if (y >= (uint_fast8_t)(value & 0x00FF)) setcarry();
+    if (y >= (uint8_t)(value & 0x00FF)) setcarry();
         else clearcarry();
-    if (y == (uint_fast8_t)(value & 0x00FF)) setzero();
+    if (y == (uint8_t)(value & 0x00FF)) setzero();
         else clearzero();
     signcalc(result);
 }
 
 static void dec() {
-    value = ((uint_fast16_t)read6502(ea));
+    value = ((uint16_t)read6502(ea));
     result = value - 1;
     zerocalc(result);
     signcalc(result);
@@ -358,15 +380,15 @@ static void dey() {
 }
 
 static void eor() {
-    value = ((uint_fast16_t)read6502(ea));
-    result = (uint_fast16_t)a ^ value;
+    value = ((uint16_t)read6502(ea));
+    result = (uint16_t)a ^ value;
     zerocalc(result);
     signcalc(result);
     saveaccum(result);
 }
 
 static void inc() {
-    value = ((uint_fast16_t)read6502(ea));
+    value = ((uint16_t)read6502(ea));
     result = value + 1;
     zerocalc(result);
     signcalc(result);
@@ -395,28 +417,28 @@ static void jsr() {
 }
 
 static void lda() {
-    value = ((uint_fast16_t)read6502(ea));
-    a = (uint_fast8_t)(value & 0x00FF);
+    value = ((uint16_t)read6502(ea));
+    a = (uint8_t)(value & 0x00FF);
     zerocalc(a);
     signcalc(a);
 }
 
 static void ldx() {
-    value = ((uint_fast16_t)read6502(ea));
-    x = (uint_fast8_t)(value & 0x00FF);
+    value = ((uint16_t)read6502(ea));
+    x = (uint8_t)(value & 0x00FF);
     zerocalc(x);
     signcalc(x);
 }
 
 static void ldy() {
-    value = ((uint_fast16_t)read6502(ea));
-    y = (uint_fast8_t)(value & 0x00FF);
+    value = ((uint16_t)read6502(ea));
+    y = (uint8_t)(value & 0x00FF);
     zerocalc(y);
     signcalc(y);
 }
 
 static void lsr() {
-    value = ((uint_fast16_t)read6502(ea));
+    value = ((uint16_t)read6502(ea));
     result = value >> 1;
     if (value & 1) setcarry(); else clearcarry();
     zerocalc(result);
@@ -425,20 +447,20 @@ static void lsr() {
 }
 
 static void lsrAcc() {
-    value = (uint_fast16_t)a;
+    value = (uint16_t)a;
     result = value >> 1;
     if (value & 1) setcarry(); else clearcarry();
     zerocalc(result);
     signcalc(result);
-    a=(uint_fast8_t)(result & 0x00FF);
+    a=(uint8_t)(result & 0x00FF);
 }
 
 static void nop() {
 }
 
 static void ora() {
-    value = ((uint_fast16_t)read6502(ea));
-    result = (uint_fast16_t)a | value;
+    value = ((uint16_t)read6502(ea));
+    result = (uint16_t)a | value;
     zerocalc(result);
     signcalc(result);
     saveaccum(result);
@@ -463,8 +485,8 @@ static void plp() {
 }
 
 static void rol() {
-    value = ((uint_fast16_t)read6502(ea));
-    result = (value << 1) | (status & FLAG_CARRY);
+    value = ((uint16_t)read6502(ea));
+    result = (value << 1) | (status&FLAG_CARRY);
     carrycalc(result);
     zerocalc(result);
     signcalc(result);
@@ -472,17 +494,17 @@ static void rol() {
 }
 
 static void rolAcc() {
-    value = (uint_fast16_t)a;
-    result = (value << 1) | (status & FLAG_CARRY);
+    value = (uint16_t)a;
+    result = (value << 1) | (status&FLAG_CARRY);
     carrycalc(result);
     zerocalc(result);
     signcalc(result);
-    a=(uint_fast8_t)(result & 0x00FF);
+    a=(uint8_t)(result & 0x00FF);
 }
 
 static void ror() {
-    value = ((uint_fast16_t)read6502(ea));
-    result = (value >> 1) | ((status & FLAG_CARRY) << 7);
+    value = ((uint16_t)read6502(ea));
+    result = (value >> 1) | ((status&FLAG_CARRY) << 7);
     if (value & 1) setcarry(); else clearcarry();
     zerocalc(result);
     signcalc(result);
@@ -490,12 +512,12 @@ static void ror() {
 }
 
 static void rorAcc() {
-    value = (uint_fast16_t)a;
-    result = (value >> 1) | ((status & FLAG_CARRY) << 7);
+    value = (uint16_t)a;
+    result = (value >> 1) | ((status&FLAG_CARRY) << 7);
     if (value & 1) setcarry(); else clearcarry();
     zerocalc(result);
     signcalc(result);
-    a=(uint_fast8_t)(result & 0x00FF);
+    a=(uint8_t)(result & 0x00FF);
 }
 
 static void rti() {
@@ -509,25 +531,52 @@ static void rts() {
     pc = value + 1;
 }
 
+
 static void sbc() {
-    value = ((uint_fast16_t)read6502(ea)) ^ 0x00FF;
-    result = (uint_fast16_t)a + value + (uint_fast16_t)(status & FLAG_CARRY);
-    carrycalc(result);
-    zerocalc(result);
-    overflowcalc(result, a, value);
-    signcalc(result);
-    if (status & FLAG_DECIMAL) {
-        clearcarry();
-        result -= 0x66;
-        if ((result & 0x0F) > 0x09) {
-            result += 0x06;
-        }
-        if ((result & 0xF0) > 0x90) {
-            result += 0x60;
-            setcarry();
-        }
+    int16_t aIn = (int16_t)a;
+    int16_t vIn = ((int16_t)read6502(ea));
+    int16_t cIn = (int16_t)(status&FLAG_CARRY);
+    int16_t r = aIn - vIn - (1-cIn);
+    // printf("\nsbc(%d-%d) cIn=%d \n",aIn,vIn,cIn);
+
+    if (status&FLAG_DECIMAL) {
+        int16_t al=(aIn&0x0F) - (vIn & 0x0F) - (1-cIn);
+        if (al < 0) al -= 6;
+
+        int16_t ah = (aIn >> 4) - (vIn >> 4) - ((al < 0) ? 1 : 0);
+
+        int16_t Z = ((r & 0xFF) == 0) ? 1 : 0;
+        int16_t N = ((r & 0x80) != 0) ? 1 : 0;
+        int16_t V = (((aIn ^ vIn) & (aIn ^  r) & 0x80) != 0) ? 1 : 0;
+        int16_t C = ((r & 0x100) != 0) ? 0 : 1;
+
+        if (ah < 0) ah -= 6;
+
+        a=(uint8_t)((ah << 4) | (al & 0x0F)) & 0xFF;
+        if (C) status|=FLAG_CARRY; else status&=(~FLAG_CARRY);
+        if (Z) status|=FLAG_ZERO; else status&=(~FLAG_ZERO);
+        if (V) status|=FLAG_OVERFLOW; else status&=(~FLAG_OVERFLOW);
+        if (N) status|=FLAG_SIGN; else status&=(~FLAG_SIGN);
+        // printf("[D] =%d($%x) ah,al=%d,%d C=%d Z=%d V=%d N=%d \n",a,a,ah,al,C,Z,V,N);
+
+    } else {
+
+        int16_t Z = ((r & 0xFF) == 0) ? 1 : 0;
+        int16_t N = ((r & 0x80) != 0) ? 1 : 0;
+        int16_t V = (((aIn ^ vIn) & (aIn ^ r) & 0x80) != 0) ? 1 : 0;
+        int16_t C = ((r & 0x100) != 0) ? 0 : 1;
+        a=(uint8_t)(r&0x0FF);
+        if (C) status|=FLAG_CARRY; else status&=(~FLAG_CARRY);
+        if (Z) status|=FLAG_ZERO; else status&=(~FLAG_ZERO);
+        if (V) status|=FLAG_OVERFLOW; else status&=(~FLAG_OVERFLOW);
+        if (N) status|=FLAG_SIGN; else status&=(~FLAG_SIGN);
+        // printf("[B] r=%d ($%x) a=%d ($%x)\n",r,r,a,a);
+
+        // printf("[B] =%d ($%x) C=%d Z=%d V=%d N=%d\n",a,a,C,Z,V,N);
+
+
+
     }
-    saveaccum(result);
 }
 
 static void sec() {
@@ -535,7 +584,7 @@ static void sec() {
 }
 
 static void sed() {
-    setdecimal();
+    status |= FLAG_DECIMAL;
 }
 
 static void sei() {
@@ -763,14 +812,14 @@ void nmi6502() {
     push16(pc);
     push8(status);
     status |= FLAG_INTERRUPT;
-    pc = (uint_fast16_t)read6502(0xFFFA) | ((uint_fast16_t)read6502(0xFFFB) << 8);
+    pc = (uint16_t)read6502(0xFFFA) | ((uint16_t)read6502(0xFFFB) << 8);
 }
 
 void irq6502() {
     push16(pc);
     push8(status);
     status |= FLAG_INTERRUPT;
-    pc = (uint_fast16_t)read6502(0xFFFE) | ((uint_fast16_t)read6502(0xFFFF) << 8);
+    pc = (uint16_t)read6502(0xFFFE) | ((uint16_t)read6502(0xFFFF) << 8);
 }
 
 uint32_t exec6502(uint32_t count) {
