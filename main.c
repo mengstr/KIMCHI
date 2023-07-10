@@ -1,5 +1,6 @@
-#include "ch32v003fun/ch32v003fun.h" 
 #include <stdio.h>
+#include "ch32v003fun/ch32v003fun.h" 
+#include "kimrom.h"
 
 const int TRACE=0;
 const int GTRACE=0;

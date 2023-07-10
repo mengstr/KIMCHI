@@ -29,13 +29,9 @@ LINKER_SCRIPT?=ch32v003fun/ch32v003fun.ld
 
 LDFLAGS+=-T $(LINKER_SCRIPT) -Wl,--gc-sections -Lch32v003fun -lgcc
 
-# ASFLAGS =   -f elf
-
 ROMFILE = kimrom
-CFILES	= $(wildcard *.c) $(wildcard ch32v003fun/*.c) $(ROMFILE).c $(wildcard TEST/*.c)
+CFILES	= $(wildcard *.c) $(wildcard ch32v003fun/*.c)
 SFILES  = $(wildcard *.s)
-
-echo CFILES = $(CFILES)
 
 SOBJS   =   $(SFILES:.s=.o)
 COBJS   =   $(CFILES:.c=.o)
@@ -47,7 +43,8 @@ ENFORCESIZE = @(FILESIZE=`stat -f '%z' $1` ; \
 			exit 1; \
 	fi )
 
-build :  $(TARGET).bin
+build : $(ROMFILE).h $(TARGET).bin
+		@$(MAKE) -C TFBOK
 
 %.o: %.c
 	@echo Compiling $<
@@ -68,10 +65,10 @@ $(TARGET).bin : $(TARGET).elf
 $(SOBJS) : $(SFILES)
 	 $(AS) $(ASFLAGS) $< -o $@
 
-$(ROMFILE).c: $(ROMFILE).bin
-	@echo Converting 6530-003 ROM Monitor to C source
+$(ROMFILE).h: $(ROMFILE).bin
+	@echo Converting 6530-003 ROM Monitor to .h
 	$(call ENFORCESIZE,$(ROMFILE).bin,1024)
-	@srec_cat $(ROMFILE).bin -binary -offset 0x1800 -o $(ROMFILE).c -C-array ROM6530
+	@srec_cat $(ROMFILE).bin -binary -offset 0x1800 -o $(ROMFILE).h -C-array ROM6530
 
 $(ROMFILE).bin: $(ROMFILE).o65
 	@echo Linking 6530-003 ROM Monitor
@@ -95,12 +92,6 @@ getfun:
 	@rm -rf tmpfun
 
 clean:
-	@echo objs=$(OBJS)
-	$(RM) $(OBJS) $(TARGET).elf $(TARGET).bin $(TARGET).hex $(TARGET).lst $(TARGET).map $(TARGET).hex || true
-	$(RM) $(ROMFILE).o65 $(ROMFILE).lst $(ROMFILE).map $(ROMFILE).bin $(ROMFILE).ptp $(ROMFILE).h65 $(ROMFILE).c || true
-
-
-
-# ca65 -g -o kimrom.o65 -l kimrom.lst --feature labels_without_colons kimrom.a65
-# ld65 -t none -vm -m kimrom.map -o kimrom.bin kimrom.o65
-# srec_cat kimrom.bin -binary -offset 0x1800 -o kimrom.c -C-array ROM6530
+	@$(RM) $(OBJS) $(TARGET).elf $(TARGET).bin $(TARGET).hex $(TARGET).lst $(TARGET).map $(TARGET).hex
+	@$(RM) $(ROMFILE).o65 $(ROMFILE).lst $(ROMFILE).map $(ROMFILE).bin $(ROMFILE).ptp $(ROMFILE).h65 $(ROMFILE).h
+	@$(MAKE) -C TFBOK clean

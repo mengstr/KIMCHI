@@ -1,6 +1,7 @@
 *.tmp
 *~
 .DS_Store
+.vscode/
 
 *.lst
 *.bin
@@ -9,7 +10,9 @@
 *.map
 *.o
 *.o65
+*.ptp
+kimrom.h
+TFBOK/*/*.h
 
-.vscode/
 ch32v003fun/
 TEST/
