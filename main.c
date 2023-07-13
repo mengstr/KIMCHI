@@ -145,11 +145,9 @@
 // x18-x27 s2-s11   Saved registers        Callee 
 // x28-x31 t3-t6    Temporaries            Caller 
 
-void reset6502();
-uint32_t exec6502(uint32_t count);
 uint8_t read6502(uint16_t address);
 void write6502(uint16_t address, uint8_t data);
-extern void setPC(uint16_t address);
+// extern void setPC(uint16_t address);
 extern void printStatus(void);
 
 extern const uint8_t ROM6530[];
@@ -269,10 +267,8 @@ void write6502(uint16_t address, uint8_t data) {
         }
     if (address==SBD) {
         data=0xff&(data<<2);
-        uint8_t dataInv=data^0xFF;
-        uint32_t b=(dataInv<<16)|data<<0;
-        MUX=b;
-        if (TRACE>0) printf("W SBD val=%02x MUX=%08lx\n", data,b); 
+        data|=0x83;             // Keep pullup at D0 D1 and D7
+        GPIOD->OUTDR=data;
         return;
         }
 
@@ -322,6 +318,7 @@ void write6502(uint16_t address, uint8_t data) {
         // PD6 --> PB4 Display/Key Row mux MSB 
         // PD7 
         data=0xff&(data<<2);
+        data&=~0x83; //Always set PD0 PD1 PD7 as input
         uint32_t b=
             (data&0x01 ?        0x1 :        0x8) |
             (data&0x02 ?       0x10 :       0x80) |
@@ -343,6 +340,45 @@ void write6502(uint16_t address, uint8_t data) {
     printf("EY! W %04x val=%02x\n",address,data);
 }
 
+void resetAndPatch(void) {
+
+
+    int aa=17;
+    for (int bb=0; bb<10; bb++) {
+        int aa;
+        aa++;
+        printf("aa is %d\n",aa);
+    }
+    printf("outer aa is %d\n",aa);
+
+
+
+
+
+    reset6502();
+
+    write6502(PADD,0x00);       // Set ports to input
+    write6502(PBDD,0x00);
+
+	GPIOA->CFGLR &= ~(0xf<<(1*4));              // Set PA1 PA2 as Input-PU
+	GPIOA->CFGLR |= (GPIO_CNF_IN_PUPD)<<(1*4);
+    GPIOA->CFGLR &= ~(0xf<<(2*4));
+	GPIOA->CFGLR |= (GPIO_CNF_IN_PUPD)<<(2*4);
+	GPIOA->OUTDR = (1 << 1) | (1 << 2);
+
+    #ifdef INITVECTORS
+        write6502(0x17fa,0x00); // Preset NMI and IRQ vectors for KIM-1
+        write6502(0x17fb,0x1C);
+        write6502(0x17fe,0x00);
+        write6502(0x17ff,0x1C);
+    #endif
+    #ifdef PC200
+        RAM[0xFA]=0x00;         // Preset KIM-1 address to $0200
+        RAM[0xFB]=0x02;
+    #endif
+}
+
+
 int main() {
 	SystemInit();
 
@@ -350,37 +386,33 @@ int main() {
 	RCC->APB2PCENR |= RCC_APB2Periph_GPIOA | RCC_APB2Periph_GPIOC | RCC_APB2Periph_GPIOD;
 
     if (TRACE>0) printf("Start\n");
-    reset6502();
-
-#ifdef INITVECTORS
-    write6502(0x17fa,0x00);
-    write6502(0x17fb,0x1C);
-    write6502(0x17fe,0x00);
-    write6502(0x17ff,0x1C);
-#endif
-
-#ifdef PC200
-    RAM[0xFA]=0x00;
-    RAM[0xFB]=0x02;
-#endif
-
-
+    resetAndPatch();
 
 for (int i=0; i<DecimalTest_length; i++) RAM[0x200+i]=DecimalTest[i];
 
     for (;;) {
+        if (GPIOA->INDR!=0x06) {
+            if (!(GPIOA->INDR&0x02)) {
+                nmi6502();
+            }
+            if (!(GPIOA->INDR&0x04)) {
+                resetAndPatch();
+            }
+        }
+        // RAM[0xFA]=GPIOD->INDR&0x80;
+
         exec6502(1);
         pc=pc&0xffff;
         x=x&0xff;
         y=y&0xff;
 
-        if (TRACE>0) {
-            if (pc>=0x302 && pc<=0x321) {
+        // if (TRACE>0) {
+            if (pc!=0x1f5b && pc!=0x1f5c) {
                 printf("PC=%04x a=%02x x=%02x y=%02x ",pc,a,x,y);
                 printStatus();
                 printf("\n");
             }
-        }
+        // }
         // poll_input();
     }
  

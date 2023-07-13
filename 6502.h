@@ -1,9 +1,12 @@
 #include <stdint.h>
 
+void reset6502();
+void nmi6502(void);
+uint32_t exec6502(uint32_t count);
+
 //externally supplied functions
 extern uint8_t read6502(uint16_t address);
 extern void write6502(uint16_t address, uint8_t data);
-
 
 #define FLAG_CARRY      0x01
 #define FLAG_ZERO       0x02
@@ -51,3 +54,5 @@ extern uint16_t pull16();
 extern uint8_t pull8();
 extern void push16(uint16_t pushval);
 extern void push8(uint8_t pushval);
+
+
