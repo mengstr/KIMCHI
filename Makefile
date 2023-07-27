@@ -16,7 +16,7 @@ OBJCOPY=riscv64-unknown-elf-objcopy
 CFLAGS+= \
 	-g -Os \
 	-flto -ffunction-sections \
-	-Wpedantic -Wshadow \
+	-Wall -Wshadow \
 	-march=rv32ec \
 	-mabi=ilp32e \
 	-nostdlib \

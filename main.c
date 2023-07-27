@@ -2,6 +2,10 @@
 #include "ch32v003fun/ch32v003fun.h" 
 #include "6502.h"
 #include "kimrom.h"
+#include "TFBOK/Wumpus/wumpus.h"
+#include "TFBOK/Lunar Lander/lunarlander.h"
+#include "TFBOK/Chess Clock/chessclock.h"
+#include "TFBOK/Timer/timer.h"
 
 #define INITVECTORS     // If defined the NMI & IRQ vectors areset to $1C00
 #define PC200           // If defined the PC will be set to $0200 at start instead of $0000
@@ -95,6 +99,10 @@
 // 6530-003 PB6 N/A
 // 6530-003 PB7
 
+uint8_t tmr;
+uint32_t tmrOverflow;
+uint32_t tmrSpeed;
+uint32_t lastTick;
 
 #define TIMER1          0x1704
 #define TIMER8          0x1705
@@ -166,8 +174,7 @@ uint8_t sad=0xff,padd=0xff,sbd=0xff,pbdd=0xff;
 
 
 /* http://srecord.sourceforge.net/ */
-const unsigned char DecimalTest[] =
-{
+const unsigned char DecimalTest[] = {
 0x20, 0x21, 0x02, 0xEA, 0xEA, 0xEA, 0xEA, 0xEA, 0xEA, 0xEA, 0xEA, 0xEA,
 0xEA, 0xEA, 0x00, 0xEA, 0x55, 0x55, 0x55, 0x55, 0x55, 0x55, 0x55, 0x55,
 0x55, 0x55, 0x55, 0x55, 0x55, 0x55, 0x55, 0x55, 0x55, 0xA9, 0x01, 0x8D,
@@ -217,16 +224,16 @@ const unsigned long DecimalTest_length      = 0x0000017E;
 uint8_t read6502(uint16_t address) {
     address=address&0xFFFF;
     if (address<1024) {
-        if ((TRACE>0)) printf("R RAM %04x val=%02x pc=%04x\n",address,RAM[address],pc);
+        if ((TRACE>2)) printf("R RAM %04x val=%02x pc=%04x\n",address,RAM[address],pc);
         return RAM[address];
     }
     if (address>=0x1C00) {
-        if (TRACE>0) printf("R ROM %05x val=%02x\n",address,ROM6530[address&0x3FF]);
+        if (TRACE>2) printf("R ROM %05x val=%02x\n",address,ROM6530[address&0x3FF]);
         return ROM6530[address&0x3FF];
     }
     if (address==SAD) {
         sad=GPIOC->INDR|0x80;   // Always use KEYPAD
-        if (TRACE>0) printf("R SAD val=%02x\n", sad); 
+        if (TRACE>2) printf("R SAD val=%02x\n", sad); 
         return sad;
     }
     if (address==SBD) {
@@ -234,18 +241,33 @@ uint8_t read6502(uint16_t address) {
         return sbd;
     }
     if (address==PADD){
-        if (TRACE>0) printf("EY! R PADD val=%02x\n", padd);
+        if (TRACE>2) printf("EY! R PADD val=%02x\n", padd);
         return padd;
     }
     if (address==PBDD){
-        if (TRACE>0) printf("EY! R PBDD val=%02x\n", pbdd);
+        if (TRACE>2) printf("EY! R PBDD val=%02x\n", pbdd);
         return pbdd;
     }
     if (address>=0x1780 && address<0x1800) {
-        if (TRACE>0) printf("R SCRATCH %04x val=%02x\n",address,RAM_1780[address&0x7F]);
+        if (TRACE>2) printf("R SCRATCH %04x val=%02x\n",address,RAM_1780[address&0x7F]);
         return RAM_1780[address&0x7F];
     }
-    printf("EY! R %04x\n",address);
+
+    if (address==0x1706) {
+        return tmr;
+    }
+
+
+    if (address==0x1707) {
+        if (tmrOverflow) {
+            tmrOverflow=0;
+            return 0x80; 
+        } else{ 
+            return 0;
+        }
+    }
+
+    // printf("EY! R %04x\n",address);
     return 0;
 }
 
@@ -254,7 +276,7 @@ void write6502(uint16_t address, uint8_t data) {
     address=address&0xFFFF;
 
     if (address<1024) {
-        if ((TRACE>0)) printf("W RAM %04x val=%02x pc=%04x\n",address,data,pc);
+        if ((TRACE>2)) printf("W RAM %04x val=%02x pc=%04x\n",address,data,pc);
         RAM[address]=data;
         return;
     }
@@ -262,7 +284,7 @@ void write6502(uint16_t address, uint8_t data) {
         uint8_t dataInv=data^0xFF;
         uint32_t b=(dataInv<<16)|data;
         KEYSEG=b;
-        if (TRACE>0) printf("W SAD val=%02x KEYSEG=%08lx\n", data,b); 
+        if (TRACE>2) printf("W SAD val=%02x KEYSEG=%08lx\n", data,b); 
         return;
         }
     if (address==SBD) {
@@ -303,7 +325,7 @@ void write6502(uint16_t address, uint8_t data) {
         KEYSEG_DIR=dirbits;
         GPIOC->OUTDR=pubits;
 
-        if (TRACE>0) printf("W PADD val=%02x KEYSEG_DIR=%08lx GPIOC_OUTDR=%08lx\n", data,dirbits,pubits);
+        if (TRACE>2) printf("W PADD val=%02x KEYSEG_DIR=%08lx GPIOC_OUTDR=%08lx\n", data,dirbits,pubits);
 
         return;
     }
@@ -329,32 +351,36 @@ void write6502(uint16_t address, uint8_t data) {
             (data&0x40 ?  0x1000000 :  0x8000000) |
             (data&0x80 ? 0x10000000 : 0x80000000);
         MUX_DIR=b;
-        if (TRACE>0) printf("W PBDD val=%02x MUX_DIR=%08lx\n", data,b); 
+        if (TRACE>2) printf("W PBDD val=%02x MUX_DIR=%08lx\n", data,b); 
         return;
-        }
+    }
+
     if (address>=0x1780 && address<0x1800) {
-        if (TRACE>0) printf("W SCRATCH %04x val=%02x\n",address,data);
+        if (TRACE>2) printf("W SCRATCH %04x val=%02x\n",address,data);
         RAM_1780[address&0x7F]=data;
         return;
     }
-    printf("EY! W %04x val=%02x\n",address,data);
+
+    if (address==0x1706) {
+        tmr=data;
+        tmrOverflow=0;
+        tmrSpeed=48*64;
+        lastTick=SysTick->CNT;
+        return;
+    }
+
+    if (address==0x1707) {
+        tmr=data;
+        tmrOverflow=0;
+        tmrSpeed=48*1024;
+        lastTick=SysTick->CNT;
+        return;
+    }
+
+    // printf("EY! W %04x val=%02x\n",address,data);
 }
 
 void resetAndPatch(void) {
-
-
-    int aa=17;
-    for (int bb=0; bb<10; bb++) {
-        int aa;
-        aa++;
-        printf("aa is %d\n",aa);
-    }
-    printf("outer aa is %d\n",aa);
-
-
-
-
-
     reset6502();
 
     write6502(PADD,0x00);       // Set ports to input
@@ -388,8 +414,44 @@ int main() {
     if (TRACE>0) printf("Start\n");
     resetAndPatch();
 
-for (int i=0; i<DecimalTest_length; i++) RAM[0x200+i]=DecimalTest[i];
+    // for (int i=0; i<DecimalTest_length; i++) RAM[0x200+i]=DecimalTest[i];
 
+    for(int i=0; i<wumpus_length; i++) RAM[wumpus_start+i]=wumpus[i];     
+    // pc=0x305;
+    RAM[0x229]=3;   // Speed
+
+    // for(int i=0; i<timer_length; i++) RAM[timer_start+i]=timer[i];     
+    // pc=0x0200;
+
+    // for(int i=0; i<chessclock_length; i++) RAM[chessclock_start+i]=chessclock[i];     
+    // pc=0x0200;
+
+    // for(int i=0; i<=lunarlander_length; i++) RAM[lunarlander_start+i]=lunarlander[i];
+    // RAM[0xFA]=0x00;         // Preset KIM-1 address to $0200
+    // RAM[0xFB]=0x02;
+
+
+
+    // RAM[0x200]=0xD8;
+    // RAM[0x201]=0xA9;
+    // RAM[0x202]=0x00;
+    // RAM[0x203]=0x85;
+    // RAM[0x204]=0xfb;
+    // RAM[0x205]=0x85;
+    // RAM[0x206]=0xfa;
+    // RAM[0x207]=0x85;
+    // RAM[0x208]=0xf9;
+    // RAM[0x209]=0x20;
+    // RAM[0x20A]=0x1f;
+    // RAM[0x20B]=0x1f;
+    // RAM[0x20C]=0x20;
+    // RAM[0x20D]=0x6a;
+    // RAM[0x20E]=0x1f;
+    // RAM[0x20F]=0x4c;
+    // RAM[0x210]=0x03;
+    // RAM[0x211]=0x02;
+    // pc=0x200;
+ 
     for (;;) {
         if (GPIOA->INDR!=0x06) {
             if (!(GPIOA->INDR&0x02)) {
@@ -399,6 +461,7 @@ for (int i=0; i<DecimalTest_length; i++) RAM[0x200+i]=DecimalTest[i];
                 resetAndPatch();
             }
         }
+
         // RAM[0xFA]=GPIOD->INDR&0x80;
 
         exec6502(1);
@@ -406,13 +469,28 @@ for (int i=0; i<DecimalTest_length; i++) RAM[0x200+i]=DecimalTest[i];
         x=x&0xff;
         y=y&0xff;
 
-        // if (TRACE>0) {
-            if (pc!=0x1f5b && pc!=0x1f5c) {
+        // PATCH FOR ERROR IN SCHEMATIC
+        if (pc==0x1f90) {               
+            if (a==0x12) a=0x14;
+            else if (a==0x13) a=0x12;
+            else if (a==0x14) a=0x13;
+        }
+
+        uint32_t diff= SysTick->CNT - lastTick;
+        if ( diff > tmrSpeed) {
+            lastTick+=diff;
+            if (tmr==0) tmrOverflow=1;
+            tmr--;
+        }
+
+
+        if (TRACE>0) {
+            if (pc<0x400) {
                 printf("PC=%04x a=%02x x=%02x y=%02x ",pc,a,x,y);
                 printStatus();
                 printf("\n");
             }
-        // }
+        }
         // poll_input();
     }
  
